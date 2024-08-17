@@ -44,7 +44,7 @@ const QuizInputSidebar = ({updateQuestions}) => {
     <div className='flex flex-col p-4 min-h-screen rounded-2xl w-full md:w-1/3 border-2 shadow-md bg-white '>
         <p className='text-black '>Enter your text:</p>
         <textarea ref={userInput} className='p-2 m-4 h-56 rounded-lg border-black border-2' placeholder='Copy and paste some text here. Maximum 50,000 characters'  />
-        <button onClick={handleClick} className='border-2 m-4 rounded-md bg-white p-2'>Generate</button>
+        <button onClick={handleClick} className='border-2 m-4 rounded-md bg-gradient-to-r from-blue-400 to-blue-500 text-white p-2'>Generate</button>
     </div>
   )
 }
