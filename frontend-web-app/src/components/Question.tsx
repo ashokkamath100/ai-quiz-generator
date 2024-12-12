@@ -55,10 +55,10 @@ const Question = ({ question, index }) => {
       </AnswerButton>
       {answerSelected > 0 ? (
         answerSelected === 2 ? (
-          <div>
+          <>
             <div className="text-green-400"> Correct! </div>
             <div>{question.explanation} </div>
-          </div>
+          </>
         ) : (
           <div className="text-red-500"> Whoops! Try Again</div>
         )

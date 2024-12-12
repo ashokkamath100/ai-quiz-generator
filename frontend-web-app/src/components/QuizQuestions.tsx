@@ -30,18 +30,18 @@ const QuizQuestions: React.FC<QuizQuestionsProps> = ({ questions }) => {
   //       return null; // Handle parsing error (optional)
   //     }
   //   }).filter(question => question !== null); // Filter out any null values from failed parsing
-  if (questions.length > 0) {
-    //questions = questions[0];
-    console.log(
-      "questions in quiz questions[0]:",
-      JSON.stringify(questions[0])
-    );
-    console.log(
-      "questions in quiz questions[1]:",
-      JSON.stringify(questions[1])
-    );
-    console.log("questions[0] question: ", questions[0].question);
-  }
+//   if (questions.length > 0) {
+//     //questions = questions[0];
+//     console.log(
+//       "questions in quiz questions[0]:",
+//       JSON.stringify(questions[0])
+//     );
+//     console.log(
+//       "questions in quiz questions[1]:",
+//       JSON.stringify(questions[1])
+//     );
+//     console.log("questions[0] question: ", questions[0].question);
+//   }
 
 
 
@@ -49,10 +49,9 @@ const QuizQuestions: React.FC<QuizQuestionsProps> = ({ questions }) => {
     <>
       <div className="flex-grow m-8">
         <div>QuizQuestions</div>
-        {questions.map((question, index) => {
+        {Object.entries(questions).map(([key, question], index) => {
           return (
             <Question key={index} question={question} index={index} />
-
           )
         })}
       </div>

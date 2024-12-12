@@ -1,15 +1,22 @@
 from fastapi import FastAPI ; 
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from langchain_core.pydantic_v1 import BaseModel as lcBaseModel, Field, validator
 from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
 from langchain_openai import OpenAI
 from typing import Union
 from langchain.output_parsers import PydanticOutputParser
+from db import get_database 
+import pydantic
+from bson import ObjectId
 import json 
+from fastapi import HTTPException
 
+
+#pydantic.json.ENCODERS_BY_TYPE[ObjectId]=str
+#from routers import auth 
 
 load_dotenv()
 
@@ -18,6 +25,8 @@ class UserInput(BaseModel):
     text: str
 
 app = FastAPI() 
+
+#app.include_router(auth.router)
 
 origins = [
     "https://localhost:3000",
@@ -32,6 +41,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+class Config:
+    json_encoders = {
+        ObjectId: str
+    }
 
 class QuizQuestion(lcBaseModel):
     question: str = Field(description="Question")
@@ -41,10 +54,23 @@ class QuizQuestion(lcBaseModel):
     answer4: str = Field(description="Possible answer to question")
     correct_answer: str = Field(description="Out of the 4 possible answers, which is correct?")
     explanation: str = Field(description="Why is the correct answer the correct answer?")
+    
+    def to_dict(self):
+        return {
+            "question": self.question,
+            "answer1": self.answer1,
+            "answer2": self.answer2,
+            "answer3": self.answer3,
+            "answer4": self.answer4,
+            "correct_answer": self.correct_answer,
+            "explanation": self.explanation
+        }
+    
+    class Config(Config):
+        pass
 
 
-
-def generate_quiz_questions(userInput: UserInput):
+def generate_quiz(userInput: UserInput):
     print(userInput) 
 
     model = OpenAI(model_name="gpt-3.5-turbo-instruct", temperature=0.0)
@@ -69,54 +95,111 @@ def generate_quiz_questions(userInput: UserInput):
         partial_variables={"format_instructions": parser.get_format_instructions()}
     )
 
+    metadata_prompt = PromptTemplate(
+        template='''Generate a concise title and description for a quiz based on the following text.
+        Output the result as a JSON object with the fields:
+        - "title": A concise, engaging title for the quiz.
+        - "description": A short description summarizing the main topic of the quiz.
+        \n{query}''',
+        input_variables=["query"]
+    )
+
 
     # feeding prompt into model using pipe operator
-    chain = prompt | model | parser
+    question_chain = prompt | model | parser
+    metadata_chain = metadata_prompt | model 
 
-    questions = []
+    questions = {}
     
+    idx = 0 
     for i in texts:
         print(len(texts))
 
-        output = chain.invoke(input = {"query": i})
-        # print('output: ' + str(output))
-        # try:
-        #     data = json.loads(output)
-        # except json.JSONDecodeError as e:
-        #     print(f"Failed to decode JSON: {e}")
+        output = question_chain.invoke(input = {"query": i})
 
-        # print(data['properties'])
-
-        # red_output = output['properties']
-        # question = red_output['question']
-        # answer1 = red_output['answer1']
-        # answer2 = red_output['answer2']
-        # answer3 = red_output['answer3']
-        # answer4 = red_output['answer4']
-        # correct_answer = red_output['correct_answer']
-
-        # final_output = {question, answer1, answer2, answer3, answer4, correct_answer}
-        # print('final_output: ' + str(final_output))
-        # questions.append(final_output)
-        questions.append(output) 
+        #questions.append(output) 
+        questions[str(idx)] = output.to_dict()
         #parser.invoke(output)
+        idx += 1 
 
     print('questions array sent to client:' + str(questions))
+    metadata_output = metadata_chain.invoke(input={"query": userInput.text})
+    print(metadata_output) 
+    try:
+        metadata = json.loads(metadata_output)  # Parse the JSON string into a Python dictionary
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse metadata JSON: {e}")
+        raise ValueError("The metadata output is not in valid JSON format")
 
-    return questions 
-        #print(i)
-    
-    ##print(texts[0])
+    print('Generated quiz title: ' + metadata["title"])
+    print('Generated quiz description: ' + metadata["description"])
+    print('Questions array sent to client: ' + str(questions))
 
-@app.post('/') 
+    return {
+        "title": metadata["title"],
+        "description": metadata["description"],
+        "questions": questions
+    }
+
+@app.delete('/deleteQuiz/{quiz_id}')
+async def delete_quiz(quiz_id: str):
+    """
+    Deletes a quiz from the database based on the provided quiz ID.
+    """
+    print(f"Attempting to delete quiz with ID: {quiz_id}")
+
+    db = get_database()
+
+    # Try to delete the quiz with the provided ID
+    result = db.quizzes.delete_one({"_id": ObjectId(quiz_id)})
+
+    if result.deleted_count == 0:
+        # If no document was deleted, the ID might not exist
+        raise HTTPException(status_code=404, detail=f"Quiz with ID {quiz_id} not found")
+
+    print(f"Successfully deleted quiz with ID: {quiz_id}")
+    return {"message": f"Quiz with ID {quiz_id} deleted successfully"}
+
+@app.get('/quiz/{quiz_id}')
+async def find_quiz(quiz_id: str):
+    db = get_database()
+
+    try:
+        # Find the quiz by its ObjectId
+        quiz = db.quizzes.find_one({"_id": ObjectId(quiz_id)})
+        if not quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        # Convert ObjectId to string
+        quiz['_id'] = str(quiz['_id'])
+
+        return {"quiz": quiz}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+@app.post('/create') 
 async def root(ui: UserInput):
     #breakpoint()
     print(ui)
-    questions = generate_quiz_questions(ui)
-    #questions = ['\n\n{"question": "When did Warner Brothers acquire Atari?", "answer1": "1976", "answer2": "1980", "answer3": "1977", "answer4": "1981", "correct_answer": "1976"}', ' {"properties": {"question": {"title": "What innovation led to the success of the Atari 2600?", "description": "Question", "type": "string"}, "answer1": {"title": "Removable controllers", "description": "Possible answer to question", "type": "string"}, "answer2": {"title": "Ability to swap game cartridges", "description": "Possible answer to question", "type": "string"}, "answer3": {"title": "Advanced graphics", "description": "Possible answer to question", "type": "string"}, "answer4": {"title": "Integration with television", "description": "Possible answer to question", "type": "string"}, "correct_answer": {"title": "Answer2", "description": "Out of the 4 possible answers, which is correct?", "type": "string"}}, "required": ["question", "answer1", "answer2", "answer3", "answer4", "correct_answer"]}', '\n\n{"question": "What is the reason behind naming their company Activision?", "answer1": "To come before Atari in the phone book", "answer2": "To make Atari mad", "answer3": "To be unique", "answer4": "To be the top company in the industry.", "correct_answer": "To come before Atari in the phone book"}']
-    #questions = [[QuizQuestion(question='What was the market size of the arcade video game business in the United States in 1980?', answer1='$5 billion', answer2='$3.2 billion', answer3='$10 billion', answer4='$100 million', correct_answer='$5 billion'), QuizQuestion(question='What event led to the decimation of the home video game industry?', answer1='The release of the ET Atari game', answer2='The joint development of the ET game with Universal', answer3='The involvement of Steven Spielberg in the ET game', answer4='The rush to market with multiple games at the same time', correct_answer='The rush to market with multiple games at the same time')]]
-    #questions = [QuizQuestion(question='What was the original family name of Fusajiro Yamauchi?', answer1='Fukui', answer2='Yamaguchi', answer3='Yamauchi', answer4='Fusajiro', correct_answer='Fukui'), QuizQuestion(question='What was the main use of playing cards in Japan during the 1500s to 1800s?', answer1='As a form of entertainment for households', answer2='As a way to communicate secret messages', answer3='As a substitute for Western playing cards', answer4='As a means of gambling', correct_answer='As a means of gambling'), QuizQuestion(question="What was the Yakuza's involvement in Nintendo's history?", answer1='They were involved in the production of playing cards.', answer2='They were involved in the distribution of playing cards.', answer3='They were involved in the operation of illegal casinos.', answer4='They were involved in the development of early arcade games.', correct_answer='They were involved in the operation of illegal casinos.'), QuizQuestion(question='Who was the first actual Yamauchi born in generations?', answer1='Fusajiro Yamauchi', answer2='Sekiryo Kaneda', answer3='Shikanojo Inaba', answer4='Hiroshi Yamauchi', correct_answer='Hiroshi Yamauchi'), QuizQuestion(question="What deal did Hiroshi's grandfather make for him to study law at Waseda University?", answer1='He had to pay a large sum of money.', answer2='He had to give up his inheritance.', answer3='He had to marry into a samurai family.', answer4='He had to serve in the military.', correct_answer='He had to marry into a samurai family.')]
-    return {"questions" : questions} ; 
+    quiz = generate_quiz(ui)
+    db = get_database()
+    quiz_id = db.quizzes.insert_one(quiz).inserted_id
+    quiz.pop('_id', None)
+    print(quiz_id)
+    return {"quiz" : quiz} ; 
 
 
 
+@app.get('/myLibrary')
+async def root():
+    print("myLibrary route hit")
+
+    db = get_database()
+
+    # Convert ObjectId to string for each document
+    all_quizzes = []
+    for quiz in db.quizzes.find({}):
+        quiz['_id'] = str(quiz['_id'])  # Convert `_id` to string
+        all_quizzes.append(quiz)
+
+    print(all_quizzes)
+    return {"quizzes": all_quizzes}

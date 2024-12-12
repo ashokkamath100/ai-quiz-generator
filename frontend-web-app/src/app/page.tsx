@@ -6,6 +6,9 @@ export default function Home() {
       <Link href={'/quizGenerator'}>
         Quiz Generator
       </Link>
+      <Link href={'/library'}>
+        My Library
+      </Link>
     </main>
   );
 }

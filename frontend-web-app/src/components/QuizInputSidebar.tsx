@@ -16,7 +16,7 @@ const QuizInputSidebar = ({updateQuestions}) => {
         console.log(payload) ; 
 
         // Perform the POST request
-        fetch('http://127.0.0.1:8000', {
+        fetch('http://127.0.0.1:8000/create', {
             method: "POST",
             headers: {
                 'Content-Type': 'application/json',
@@ -30,8 +30,8 @@ const QuizInputSidebar = ({updateQuestions}) => {
             return response.json();  // Parse the JSON from the response
         })
         .then(data => {
-            updateQuestions(data.questions) ; 
-            console.log('Response data:', data.questions);
+            updateQuestions(data.quiz.questions) ; 
+            console.log('Response data:', data.quiz);
         })
         .catch(error => {
             console.error('There was a problem with the fetch operation:', error);
