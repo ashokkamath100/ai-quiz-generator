@@ -1,39 +1,64 @@
 import Link from "next/link";
 
-const QuizCard = ({ quiz }) => {
+type Quiz = {
+  _id: string;
+  creationTime: string; // Change to `Date` if needed
+  numPlays: number;
+  numQuestions: number;
+  title: string;
+  description: string;
+};
+
+type QuizCardProps = {
+  quiz: Quiz;
+};
+
+const QuizCard: React.FC<QuizCardProps> = ({ quiz, onDelete }) => {
   const { _id, creationTime, numPlays, numQuestions, title, description } = quiz;
 
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent) => {
+    // Prevent the click event from propagating to the Link
+    e.stopPropagation();
+
     try {
-      const response = await fetch(`http://127.0.0.1:8000/deleteQuiz/${_id}`, {
-        method: 'DELETE',
+      const address = process.env.NEXT_PUBLIC_LAMBDA_API + 'deleteQuiz/' + _id;
+      const response = await fetch(address, {
+        method: "DELETE",
       });
-  
+
       if (response.ok) {
-        console.log('Quiz deleted successfully!');
+        console.log("Quiz deleted successfully!");
         // Optionally refresh or update the UI here
+        onDelete(_id)
       } else {
-        console.error('Failed to delete quiz:', response.statusText);
+        console.error("Failed to delete quiz:", response.statusText);
       }
     } catch (error) {
-      console.error('Error deleting quiz:', error);
+      console.error("Error deleting quiz:", error);
     }
   };
   return (
-    <Link href={`/learn/${_id}`}>
-      <div className="rounded-lg border border-gray-800 my-4 p-4">
-        <div className="flex flex-row justify-between">
-          <p className="text-sm">
-            Creation Time: {creationTime} - Plays: {numPlays} - Questions:{" "}
-            {numQuestions}
-          </p>
-          <button onClick={handleDelete}>🗑</button>
-        </div>
-        <h1 className="text-2xl font-bold">{title}</h1>
-        <p className="text-med">{description}</p>
+    <div className="rounded-lg border border-gray-800 my-4 p-4">
+      <div className="flex flex-row justify-between items-center">
+        <Link href={`/learn/${_id}`} className="flex-grow">
+          <div className="cursor-pointer">
+            <p className="text-sm">
+              Creation Time: {creationTime} - Plays: {numPlays} - Questions:{" "}
+              {numQuestions}
+            </p>
+            <h1 className="text-2xl font-bold">{title}</h1>
+            <p className="text-med">{description}</p>
+          </div>
+        </Link>
+        <button
+          onClick={handleDelete}
+          className="ml-4 text-white p-2 rounded hover:bg-red-600"
+        >
+          🗑
+        </button>
       </div>
-    </Link>
+    </div>
   );
 };
 

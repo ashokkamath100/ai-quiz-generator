@@ -1,52 +1,68 @@
-'use client' ; 
-import React, {useRef} from 'react'
+'use client';
+import React, { useRef } from 'react';
 
-const QuizInputSidebar = ({updateQuestions}) => {
-  const userInput = useRef(null) ; 
-
+type QuizInputSidebarProps = {
+    updateQuiz: (newQuizData: any) => void;
+    existingQuiz: any;
+    setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  };
   
 
-  const handleClick = () => {
-    console.log('handleClick')
-    if(userInput.current){
-        console.log('do we get here?') ; 
-        const payload = {
-            'text': userInput.current.value 
-        }
-        console.log(payload) ; 
+const QuizInputSidebar: React.FC<QuizInputSidebarProps> = ({ updateQuiz, existingQuiz, setLoading }) => {
+  const userInput = useRef<HTMLTextAreaElement | null>(null);
 
-        // Perform the POST request
-        fetch('http://127.0.0.1:8000/create', {
-            method: "POST",
-            headers: {
-                'Content-Type': 'application/json',
-            }, 
-            body: JSON.stringify(payload),
-        })
+  const handleClick = () => {
+    if (userInput.current) {
+      const payload = {
+        text: userInput.current.value,
+        existing_quiz: existingQuiz && Object.keys(existingQuiz.questions).length > 0
+          ? existingQuiz
+          : undefined
+      };
+
+      const address = process.env.NEXT_PUBLIC_LAMBDA_API + 'create';
+      setLoading(true); // Show loading spinner
+
+      fetch(address, {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
         .then(response => {
-            if (!response.ok) {
+          if (!response.ok) {
             throw new Error('Network response was not ok');
-            }
-            return response.json();  // Parse the JSON from the response
+          }
+          return response.json();
         })
         .then(data => {
-            updateQuestions(data.quiz.questions) ; 
-            console.log('Response data:', data.quiz);
+          console.log("Returned quiz:", data.quiz);
+          updateQuiz(data.quiz); // whole quiz object including title, description, merged questions
+          console.log('Response data:', data);
         })
         .catch(error => {
-            console.error('There was a problem with the fetch operation:', error);
+          console.error('There was a problem with the fetch operation:', error);
         });
-            }
-        }
-
+    }
+  };
 
   return (
     <div className='flex flex-col p-4 min-h-screen rounded-2xl w-full md:w-1/3 border-2 shadow-md bg-white '>
-        <p className='text-black '>Enter your text:</p>
-        <textarea ref={userInput} className='p-2 m-4 h-56 rounded-lg border-black border-2' placeholder='Copy and paste some text here. Maximum 50,000 characters'  />
-        <button onClick={handleClick} className='border-2 m-4 rounded-md bg-gradient-to-r from-blue-400 to-blue-500 text-white p-2'>Generate</button>
+      <p className='text-black'>Enter your text:</p>
+      <textarea
+        ref={userInput}
+        className='p-2 m-4 h-56 rounded-lg border-black border-2'
+        placeholder='Copy and paste some text here. Maximum 50,000 characters'
+      />
+      <button
+        onClick={handleClick}
+        className='border-2 m-4 rounded-md bg-gradient-to-r from-blue-400 to-blue-500 text-white p-2'
+      >
+        Generate
+      </button>
     </div>
-  )
-}
+  );
+};
 
-export default QuizInputSidebar ; 
+export default QuizInputSidebar;

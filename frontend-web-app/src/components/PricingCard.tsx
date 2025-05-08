@@ -1,3 +1,5 @@
+import { Plan } from "@/app/pricing/page";
+
 
 const PricingCard: React.FC<{ plan: Plan }> = ({ plan }) => {
     return (

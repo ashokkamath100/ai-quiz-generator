@@ -7,12 +7,16 @@ import QuizCard from "@/components/QuizCard";
 const MyLibrary = () => {
     const [libraryData, setLibraryData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchLibraryData = async () => {
             try {
-                const response = await fetch('http://127.0.0.1:8000/myLibrary');
+                console.log('process.env.NEXT_PUBLIC_LAMBDA_API: ' + process.env.NEXT_PUBLIC_LAMBDA_API)  
+
+                const address = process.env.NEXT_PUBLIC_LAMBDA_API + 'myLibrary'
+                console.log('address: ' + address)  
+                const response = await fetch(address);
                 console.log(response) ; 
                 if (!response.ok) {
                     throw new Error("Failed to fetch library data");
@@ -20,7 +24,9 @@ const MyLibrary = () => {
                 const data = await response.json();
                 setLibraryData(data !== null ? data.quizzes : []);
             } catch (err) {
-                setError(err.message);
+                if(err instanceof Error){
+                    setError(err.message);
+                }
             } finally {
                 setLoading(false);
             }
@@ -29,22 +35,28 @@ const MyLibrary = () => {
         fetchLibraryData();
     }, []); // Dependency array empty to run on component mount
 
+    const deleteQuizById = (id: string) => {
+        setLibraryData(prev => prev.filter(q => q._id !== id));
+    };
+
     return (
-        <div className="mx-56 my-10">
-            <h1 className="text-4xl">My Library</h1>
-            <FolderBar />
-            <search />
+        <div className="px-2 py-4 mx-auto max-w-8xl sm:px-4 lg:px-6">
+            <div className="bg-gradient-to-br from-sky-100 via-sky-200 to-sky-300 rounded-2xl p-10 shadow-xl">
+                <h1 className="text-4xl">My Library</h1>
+                <FolderBar />
+                <search />
 
-            {loading && <p>Loading...</p>}
-            {error && <p className="text-red-500">Error: {error}</p>}
+                {loading && <p>Loading...</p>}
+                {error && <p className="text-red-500">Error: {error}</p>}
 
-            {libraryData.length > 0 ? (
-                libraryData.map((quiz, index) => (
-                    <QuizCard key={index} quiz={quiz} />
-                ))
-            ) : (
-                !loading && <p>No quizzes found.</p>
-            )}
+                {libraryData.length > 0 ? (
+                    libraryData.slice().reverse().map((quiz, index) => (
+                        <QuizCard key={index} quiz={quiz} onDelete={deleteQuizById} />
+                    ))
+                ) : (
+                    !loading && <p>No quizzes found.</p>
+                )}
+            </div>
         </div>
     );
 };

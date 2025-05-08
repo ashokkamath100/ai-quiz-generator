@@ -1,11 +1,17 @@
 "use client";
 import React, { useState } from "react";
 import AnswerButton from "./AnswerButton";
+import { QuestionInterface } from "./QuizQuestions";
 
-const Question = ({ question, index }) => {
+type QuestionProps = {
+  question: QuestionInterface
+  index: number;
+};
+
+const Question: React.FC<QuestionProps> = ({ question, index }) => {
   const [answerSelected, setAnswerSelected] = useState(0);
 
-  const handleClick = (answer, correctAnswer) => {
+  const handleClick = (answer: string, correctAnswer:string ) => {
     if (answer === correctAnswer) {
       console.log("correct Answer was selected");
       setAnswerSelected(2);

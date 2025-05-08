@@ -1,47 +1,47 @@
-from fastapi import FastAPI ; 
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from langchain_text_splitters import RecursiveCharacterTextSplitter 
-from langchain_core.pydantic_v1 import BaseModel, Field, validator
-from langchain_core.prompts import PromptTemplate
-from dotenv import load_dotenv
-from langchain_openai import OpenAI
-from typing import Union
+import asyncio
+import asyncpg
 
-load_dotenv()
+async def test_cockroachdb_connection(connection_string):
+    try:
+        # Establish the connection
+        connection = await asyncpg.connect(connection_string)
 
-def generate_quiz_questions(userInput: UserInput):
-    print(userInput) 
-    
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size = 2000,
-        chunk_overlap = 400, 
-        length_function = len,
-        is_separator_regex=False
-    )
+        # Execute a simple query to check the connection
+        version = await connection.fetchval("SELECT version();")
+        print("Connected to CockroachDB!")
+        print("Database version:", version)
 
-    texts = text_splitter.create_documents([userInput.text])
+        # Create the "characters" table if it doesn't exist
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS characters (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL,
+            level INTEGER NOT NULL
+        );
+        """
+        await connection.execute(create_table_query)
+        print("Successfully ensured 'characters' table exists.")
 
-    parser = PydanticOutputParser(pydantic_object=QuizQuestion)
+        # Optionally, query to confirm the table exists
+        table_check = await connection.fetch("""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_name = 'characters';
+        """)
+        if table_check:
+            print("The 'characters' table is ready to use!")
+        else:
+            print("Failed to verify the 'characters' table.")
 
-    prompt = PromptTemplate(
-        template='''Create a multiple choice question based on 
-        the following text. \n{format_instructions} \n{query}''',
-        input_variables=["query"],
-        partial_variables={"format_instructions": parser.get_format_instructions()}
-    )
-    prompt_and_model = prompt | model 
+        # Close the connection
+        await connection.close()
+    except Exception as e:
+        print("Failed to connect to CockroachDB or create the table.")
+        print("Error:", str(e))
 
-    
-    for i in texts:
-        print(len(texts))
+if __name__ == "__main__":
+    # Replace this with your actual connection string
+    connection_string = "postgresql://ashok:_tozG95onZSS8o0GwAzMEw@space-quail-6298.j77.aws-us-east-1.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full"
 
-        output = prompt_and_model.invoke({"query": i})
-        parser.invoke(output)
-
-        #print(i)
-    
-    ##print(texts[0])
-
-if __name__ == '__main__':
-    
+    asyncio.run(test_cockroachdb_connection(connection_string))

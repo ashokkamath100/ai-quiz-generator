@@ -1,6 +1,6 @@
 import PricingCard from "@/components/PricingCard";
 
-interface Plan {
+export interface Plan {
     planType: string;
     featureType: string;
     price: string;

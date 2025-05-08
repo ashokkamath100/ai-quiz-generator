@@ -1,61 +1,41 @@
 "use client";
-import React, { useState } from "react";
-import AnswerButton from "./AnswerButton";
+import React from "react";
 import Question from "./Question";
 
-interface Question {
+export interface QuestionInterface {
   question: string;
   answer1: string;
   answer2: string;
   answer3: string;
   answer4: string;
   correct_answer: string;
-  explanation: string ; 
+  explanation: string;
   properties: Object;
 }
 
 interface QuizQuestionsProps {
-  questions: Question[];
+  questions: QuestionInterface[];
+  loading: boolean;
 }
 
-const QuizQuestions: React.FC<QuizQuestionsProps> = ({ questions }) => {
-  console.log("Questions Type:", typeof questions); // Should log 'object'
-
-  //questions = questions[0]
-  // const parsedQuestions = questions.map(questionStr => {
-  //     try {
-  //       return JSON.parse(questionStr); // Parse the string into an object
-  //     } catch (e) {
-  //       console.error("Failed to parse question:", questionStr, e);
-  //       return null; // Handle parsing error (optional)
-  //     }
-  //   }).filter(question => question !== null); // Filter out any null values from failed parsing
-//   if (questions.length > 0) {
-//     //questions = questions[0];
-//     console.log(
-//       "questions in quiz questions[0]:",
-//       JSON.stringify(questions[0])
-//     );
-//     console.log(
-//       "questions in quiz questions[1]:",
-//       JSON.stringify(questions[1])
-//     );
-//     console.log("questions[0] question: ", questions[0].question);
-//   }
-
-
-
+const QuizQuestions: React.FC<QuizQuestionsProps> = ({ questions, loading }) => {
+  console.log('questions: ', questions)
   return (
-    <>
-      <div className="flex-grow m-8">
-        <div>QuizQuestions</div>
-        {Object.entries(questions).map(([key, question], index) => {
-          return (
-            <Question key={index} question={question} index={index} />
-          )
-        })}
-      </div>
-    </>
+    <div className="flex-grow m-8">
+      {(!questions || questions.length === 0) && !loading && (
+        <p>No questions available at the moment. Please check back later!</p>
+      )}
+      
+      {questions.length > 0 && questions.map((question, index) => (
+        <Question key={index} question={question} index={index} />
+      ))}
+
+      {loading && (
+        <div className="mt-6 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500 border-solid"></div>
+        </div>
+      )}
+    </div>
   );
 };
 

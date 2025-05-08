@@ -1,6 +1,13 @@
 import React from "react";
 
-const AnswerButton = ({answer, correctAnswer, handleClick, children}) => {
+type AnswerButtonProps = {
+  answer: string; // Replace `string` with the appropriate type if needed
+  correctAnswer: string; // Replace `string` with the appropriate type
+  handleClick: (answer: string, correctAnswer: string) => void; // Function type for the click handler
+  children: React.ReactNode; // For JSX children
+};
+
+const AnswerButton: React.FC<AnswerButtonProps> = ({ answer, correctAnswer, handleClick, children }) => {
   
 
 

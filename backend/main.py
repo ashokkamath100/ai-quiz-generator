@@ -2,18 +2,20 @@ from fastapi import FastAPI ;
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
 from pydantic import BaseModel, ConfigDict
-from langchain_core.pydantic_v1 import BaseModel as lcBaseModel, Field, validator
+from pydantic import BaseModel, Field
+from datetime import datetime
+#from langchain_core.pydantic_v1 import BaseModel as lcBaseModel, Field, validator
 from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
 from langchain_openai import OpenAI
-from typing import Union
 from langchain.output_parsers import PydanticOutputParser
-from db import get_database 
-import pydantic
+from langchain.chat_models import ChatOpenAI
+
+from .db import get_database 
 from bson import ObjectId
 import json 
 from fastapi import HTTPException
-
+from .routers import auth
 
 #pydantic.json.ENCODERS_BY_TYPE[ObjectId]=str
 #from routers import auth 
@@ -21,12 +23,15 @@ from fastapi import HTTPException
 load_dotenv()
 
 
+from typing import Optional, Dict, Any
+
 class UserInput(BaseModel):
     text: str
+    existing_quiz: Optional[Dict[str, Any]] = None
 
 app = FastAPI() 
 
-#app.include_router(auth.router)
+app.include_router(auth.router)
 
 origins = [
     "https://localhost:3000",
@@ -46,7 +51,30 @@ class Config:
         ObjectId: str
     }
 
-class QuizQuestion(lcBaseModel):
+# class QuizQuestion(lcBaseModel):
+#     question: str = Field(description="Question")
+#     answer1: str = Field(description="Possible answer to question")
+#     answer2: str = Field(description="Possible answer to question")
+#     answer3: str = Field(description="Possible answer to question")
+#     answer4: str = Field(description="Possible answer to question")
+#     correct_answer: str = Field(description="Out of the 4 possible answers, which is correct?")
+#     explanation: str = Field(description="Why is the correct answer the correct answer?")
+    
+#     def to_dict(self):
+#         return {
+#             "question": self.question,
+#             "answer1": self.answer1,
+#             "answer2": self.answer2,
+#             "answer3": self.answer3,
+#             "answer4": self.answer4,
+#             "correct_answer": self.correct_answer,
+#             "explanation": self.explanation
+#         }
+    
+#     class Config(Config):
+#         pass
+
+class QuizQuestion(BaseModel):
     question: str = Field(description="Question")
     answer1: str = Field(description="Possible answer to question")
     answer2: str = Field(description="Possible answer to question")
@@ -66,28 +94,33 @@ class QuizQuestion(lcBaseModel):
             "explanation": self.explanation
         }
     
-    class Config(Config):
-        pass
+    class Config:
+        json_encoders = {
+            ObjectId: str
+        }
 
-
+class QuizMetadata(BaseModel):
+    title: str
+    description: str
 def generate_quiz(userInput: UserInput):
-    print(userInput) 
+    print(userInput)
 
-    model = OpenAI(model_name="gpt-3.5-turbo-instruct", temperature=0.0)
-    
+    model = ChatOpenAI(model_name="gpt-4o", temperature=0.0)
+
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size = 2000,
-        chunk_overlap = 400, 
-        length_function = len,
+        chunk_size=1000,
+        chunk_overlap=400,
+        length_function=len,
         is_separator_regex=False
     )
 
     texts = text_splitter.create_documents([userInput.text])
 
     parser = PydanticOutputParser(pydantic_object=QuizQuestion)
+    metadata_parser = PydanticOutputParser(pydantic_object=QuizMetadata)
 
     prompt = PromptTemplate(
-        template='''Create a multiple choice question in the format specified based on 
+        template='''Create a difficult multiple choice question in the format specified based on 
         the following text. The output should be a flat JSON object with the following fields: 
         "question", "answer1", "answer2", "answer3", "answer4", "correct_answer". 
         \n{format_instructions} \n{query}''',
@@ -96,50 +129,49 @@ def generate_quiz(userInput: UserInput):
     )
 
     metadata_prompt = PromptTemplate(
-        template='''Generate a concise title and description for a quiz based on the following text.
-        Output the result as a JSON object with the fields:
-        - "title": A concise, engaging title for the quiz.
-        - "description": A short description summarizing the main topic of the quiz.
-        \n{query}''',
-        input_variables=["query"]
+        template='''Generate a quiz title and description based on the following text.
+        {format_instructions}
+
+        Text:
+        {query}''',
+        input_variables=["query"],
+        partial_variables={"format_instructions": metadata_parser.get_format_instructions()}
     )
 
-
-    # feeding prompt into model using pipe operator
     question_chain = prompt | model | parser
-    metadata_chain = metadata_prompt | model 
+    metadata_chain = metadata_prompt | model | metadata_parser
 
-    questions = {}
-    
-    idx = 0 
+    existing = userInput.existing_quiz or {}
+    existing_questions = existing.get("questions", {})
+
+    idx = len(existing_questions)
+    new_questions = {}
+
     for i in texts:
-        print(len(texts))
+        output = question_chain.invoke(input={"query": i})
+        new_questions[str(idx)] = output.to_dict()
+        idx += 1
 
-        output = question_chain.invoke(input = {"query": i})
+    all_questions = {**existing_questions, **new_questions}
 
-        #questions.append(output) 
-        questions[str(idx)] = output.to_dict()
-        #parser.invoke(output)
-        idx += 1 
-
-    print('questions array sent to client:' + str(questions))
-    metadata_output = metadata_chain.invoke(input={"query": userInput.text})
-    print(metadata_output) 
-    try:
-        metadata = json.loads(metadata_output)  # Parse the JSON string into a Python dictionary
-    except json.JSONDecodeError as e:
-        print(f"Failed to parse metadata JSON: {e}")
-        raise ValueError("The metadata output is not in valid JSON format")
-
-    print('Generated quiz title: ' + metadata["title"])
-    print('Generated quiz description: ' + metadata["description"])
-    print('Questions array sent to client: ' + str(questions))
+    if "title" in existing and "description" in existing:
+        metadata = existing
+    else:
+        meta = metadata_chain.invoke(input={"query": userInput.text})
+        metadata = {
+            "title": meta.title,
+            "description": meta.description
+        }
 
     return {
         "title": metadata["title"],
         "description": metadata["description"],
-        "questions": questions
+        "questions": all_questions,
+        "creation_time": existing.get("creation_time", datetime.utcnow().isoformat()),
+        "numPlays": existing.get("numPlays", 0),
+        "num_questions": len(all_questions)
     }
+
 
 @app.delete('/deleteQuiz/{quiz_id}')
 async def delete_quiz(quiz_id: str):
@@ -148,10 +180,10 @@ async def delete_quiz(quiz_id: str):
     """
     print(f"Attempting to delete quiz with ID: {quiz_id}")
 
-    db = get_database()
+    db = await get_database()
 
     # Try to delete the quiz with the provided ID
-    result = db.quizzes.delete_one({"_id": ObjectId(quiz_id)})
+    result = await db.quizzes.delete_one({"_id": ObjectId(quiz_id)})
 
     if result.deleted_count == 0:
         # If no document was deleted, the ID might not exist
@@ -162,11 +194,11 @@ async def delete_quiz(quiz_id: str):
 
 @app.get('/quiz/{quiz_id}')
 async def find_quiz(quiz_id: str):
-    db = get_database()
+    db = await get_database()
 
     try:
         # Find the quiz by its ObjectId
-        quiz = db.quizzes.find_one({"_id": ObjectId(quiz_id)})
+        quiz = await db.quizzes.find_one({"_id": ObjectId(quiz_id)})
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
 
@@ -176,30 +208,46 @@ async def find_quiz(quiz_id: str):
         return {"quiz": quiz}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-@app.post('/create') 
-async def root(ui: UserInput):
-    #breakpoint()
-    print(ui)
-    quiz = generate_quiz(ui)
-    db = get_database()
-    quiz_id = db.quizzes.insert_one(quiz).inserted_id
-    quiz.pop('_id', None)
-    print(quiz_id)
-    return {"quiz" : quiz} ; 
+    
 
+@app.post('/create')
+async def root(ui: UserInput):
+    print("Received input:", ui)
+    quiz = generate_quiz(ui)
+
+    db = await get_database()
+
+    # Check if updating an existing quiz
+    if ui.existing_quiz and "_id" in ui.existing_quiz:
+        try:
+            quiz_id = ui.existing_quiz["_id"]
+            result = await db.quizzes.update_one(
+                {"_id": ObjectId(quiz_id)},
+                {"$set": quiz}
+            )
+            print(f"Updated quiz ID: {quiz_id}, matched: {result.matched_count}, modified: {result.modified_count}")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to update quiz: {e}")
+    else:
+        # Insert as a new quiz
+        result = await db.quizzes.insert_one(quiz)
+        quiz["_id"] = str(result.inserted_id)
+        print("Inserted new quiz with ID:", quiz["_id"])
+
+    return {"quiz": quiz}
 
 
 @app.get('/myLibrary')
 async def root():
     print("myLibrary route hit")
 
-    db = get_database()
+    db = await get_database()
 
     # Convert ObjectId to string for each document
     all_quizzes = []
-    for quiz in db.quizzes.find({}):
+    async for quiz in db.quizzes.find({}):
         quiz['_id'] = str(quiz['_id'])  # Convert `_id` to string
         all_quizzes.append(quiz)
 
-    print(all_quizzes)
+    #print(all_quizzes)
     return {"quizzes": all_quizzes}

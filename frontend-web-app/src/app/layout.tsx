@@ -4,7 +4,10 @@ import "./globals.css";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import { getServerSession } from "next-auth";
-import AuthProvider from "@/lib/AuthProvider";
+import {AuthProvider} from "@/components/AuthContext";
+import { verifyAuth } from '@/lib/auth';
+import { redirect } from 'next/navigation' ;
+import QuizBearBanner from "@/components/QuizBearBanner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,19 +21,20 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getServerSession() ; 
+  //const session = await getServerSession() ; 
+  const result = await verifyAuth() ; 
+
+  console.log('result: ' + JSON.stringify(result)) ; 
   return (
     <html lang="en">
       <body className={inter.className}>
-        
-        <AuthProvider session={session} >
-        <NavBar /> 
-        {/*NavBar needs to be inside AuthProvider because AuthProvider has SessionProvider
-        and any component (like NavBar) that is using the useSession hook needs to be wrapped
-        inside SessionProvider 
-         */}
-        {children} 
+        {/* <AuthProvider session={session} > */}
+        <div className="min-h-screen bg-gradient-to-br from-pink-100 via-yellow-100 to-pink-200" >
+        <AuthProvider >
+          {result.user ? <div></div> : <NavBar />  }
+          {children} 
         </AuthProvider>
+        </div>
       </body>
     </html>
   );
